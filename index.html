@@ -72,7 +72,7 @@
                 <input type="text" id="group" placeholder="Product Group (e.g., Charger)" class="input-field col-span-4 md:col-span-2" required>
                 <input type="text" id="name" placeholder="Product Name" class="input-field col-span-4 md:col-span-1" required>
                 <input type="number" id="quantity" placeholder="Quantity" min="1" class="input-field col-span-2 md:col-span-1" required>
-                <input type="number" id="rate" placeholder="Rate (e.g., 500.00)" min="0.01" step="0.01" class="input-field col-span-2 md:col-span-1" required>
+                <input type="number" id="rate" placeholder="Rate (e.g., 500.00 Rs.)" min="0.01" step="0.01" class="input-field col-span-2 md:col-span-1" required>
                 <button type="submit" class="col-span-4 md:col-span-6 lg:col-span-6 bg-indigo-600 text-white p-3 rounded-lg hover:bg-indigo-700 shadow-lg transition duration-150 transform hover:scale-[1.01] font-semibold">
                     Add Item to Stock
                 </button>
@@ -139,25 +139,11 @@
                 </div>
             </div>
         </div>
-
     </div>
 
-    <!-- Custom Message Modal for confirmations/alerts -->
-    <div id="message-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center p-4 z-50 transition-opacity duration-300">
-        <div class="bg-white p-8 rounded-xl shadow-2xl max-w-md w-full text-center transform transition-transform duration-300 scale-100">
-            <p id="modal-text" class="text-xl font-medium text-gray-800 mb-6"></p>
-            <div id="modal-custom-content">
-                <!-- Custom content like input field for selling will be inserted here -->
-            </div>
-            <div id="modal-buttons" class="flex justify-center space-x-4">
-                <button id="modal-confirm" class="bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition duration-150 font-medium hidden">
-                    Yes
-                </button>
-                <button id="modal-cancel" class="bg-gray-300 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-400 transition duration-150 font-medium">
-                    Close
-                </button>
-            </div>
-        </div>
+    <!-- Toast Notification Container (Bottom Right) -->
+    <div id="toast-notification" class="hidden fixed bottom-6 right-6 p-4 rounded-lg shadow-xl text-white font-semibold text-sm transition-opacity duration-300 z-50 opacity-95">
+        <!-- Notification message here -->
     </div>
 
 
@@ -167,54 +153,38 @@
         let salesItems = [];
         let nextStockId = 1; // Unique ID for stock items
         let nextSaleId = 1;  // Unique ID for sales entries
+        const CURRENCY_SYMBOL = 'Rs. '; // Pakistani Rupee symbol
 
         // --- Utility Functions ---
 
         /**
-         * Custom Modal/Message Box (Replaces alert() and confirm())
+         * Replaces showMessage/alert/confirm with a non-intrusive toast notification.
          * @param {string} message - Message to display.
-         * @param {function | null} onConfirm - Function to run on confirm (for confirmation dialogs).
-         * @param {HTMLElement | null} customContent - Optional custom element to insert into the modal.
+         * @param {'success'|'error'|'warning'} type - Type of notification.
          */
-        function showMessage(message, onConfirm = null, customContent = null) {
-            const modal = document.getElementById('message-modal');
-            const modalTextElement = document.getElementById('modal-text');
-            const confirmButton = document.getElementById('modal-confirm');
-            const cancelButton = document.getElementById('modal-cancel');
-            const customContentDiv = document.getElementById('modal-custom-content');
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast-notification');
             
-            // Clear any previous custom elements
-            customContentDiv.innerHTML = '';
+            // Remove previous classes and reset state
+            toast.classList.remove('hidden', 'bg-red-600', 'bg-green-600', 'bg-yellow-600', 'opacity-0');
+            toast.classList.add('opacity-95');
+            toast.textContent = message;
 
-            modalTextElement.textContent = message;
-
-            // Insert custom content if provided
-            if (customContent) {
-                customContentDiv.appendChild(customContent);
+            if (type === 'error') {
+                toast.classList.add('bg-red-600');
+            } else if (type === 'warning') {
+                toast.classList.add('bg-yellow-600');
+            } else { // default success
+                toast.classList.add('bg-green-600');
             }
 
-            // Reset event listeners and visibility
-            confirmButton.onclick = null;
-            confirmButton.classList.add('hidden');
-            cancelButton.textContent = 'Close';
-            cancelButton.onclick = () => modal.classList.add('hidden');
-
-            if (onConfirm) {
-                confirmButton.classList.remove('hidden');
-                cancelButton.textContent = 'Cancel'; // Changed to Cancel for confirmation flow
-
-                confirmButton.onclick = () => {
-                    // Check if the custom content (if any) is still there before proceeding
-                    if (customContent && !customContentDiv.contains(customContent)) {
-                        console.error("Custom content missing, preventing confirmation.");
-                        return; 
-                    }
-                    modal.classList.add('hidden');
-                    onConfirm();
-                };
-            }
-            
-            modal.classList.remove('hidden');
+            // Hide the toast after 4 seconds
+            setTimeout(() => {
+                toast.classList.add('opacity-0');
+                setTimeout(() => {
+                     toast.classList.add('hidden');
+                }, 500); // 500ms for fade out transition
+            }, 4000);
         }
 
         /**
@@ -241,7 +211,7 @@
                 }
             } catch (e) {
                 console.error("Error loading data from local storage:", e);
-                // Non-critical error, continue with empty data
+                showToast("Error loading data. Check console.", 'error');
             }
             renderStock();
             renderSales();
@@ -258,7 +228,7 @@
                 localStorage.setItem('shop_next_sale_id', nextSaleId.toString());
             } catch (e) {
                 console.error("Error saving data to local storage:", e);
-                showMessage("Error saving data. Local storage might be full.");
+                showToast("Error saving data. Local storage might be full.", 'error');
             }
         }
 
@@ -277,7 +247,7 @@
             const rate = parseFloat(document.getElementById('rate').value);
 
             if (!code || !group || !name || isNaN(quantity) || quantity <= 0 || isNaN(rate) || rate <= 0) {
-                showMessage("Please fill all fields correctly (Quantity and Rate must be positive numbers).");
+                showToast("Please fill all fields correctly (Quantity and Rate must be positive numbers).", 'warning');
                 return;
             }
 
@@ -304,103 +274,139 @@
             this.reset();
             document.getElementById('code').focus();
             
-            showMessage(`Stock item '${name}' added successfully! Quantity: ${quantity}`);
+            showToast(`Stock item '${name}' added successfully! Quantity: ${quantity}`);
         });
 
         /**
-         * Marks an item as sold from the current stock.
+         * Initiates the inline selling input for a stock item.
          * @param {number} itemId - Stock item's unique ID.
          */
-        function sellItem(itemId) {
+        function initiateSell(itemId) {
             const stockIndex = stockItems.findIndex(item => item.id === itemId);
             if (stockIndex === -1) {
-                showMessage("Item not found in stock.");
+                showToast("Item not found in stock.", 'error');
                 return;
             }
 
             const item = stockItems[stockIndex];
+            const actionCell = document.getElementById(`action-cell-${itemId}`);
+
+            // Create the inline selling form
+            const sellForm = document.createElement('div');
+            sellForm.id = `sell-form-${itemId}`;
+            sellForm.classList.add('flex', 'flex-col', 'space-y-1', 'items-end');
             
-            // 1. Create the input field for quantity
-            const sellQtyInput = document.createElement('input');
-            sellQtyInput.type = 'number';
-            sellQtyInput.min = '1';
-            sellQtyInput.max = item.quantity.toString();
-            sellQtyInput.value = item.quantity.toString();
-            sellQtyInput.id = 'sell-quantity-input';
-            sellQtyInput.classList.add('w-full', 'p-3', 'border', 'border-gray-300', 'rounded-lg', 'mb-6', 'text-center', 'font-medium', 'text-lg');
+            // Quantity Input
+            const qtyInput = document.createElement('input');
+            qtyInput.type = 'number';
+            qtyInput.min = '1';
+            qtyInput.max = item.quantity.toString();
+            qtyInput.value = item.quantity.toString();
+            qtyInput.id = `sell-qty-input-${itemId}`;
+            qtyInput.classList.add('w-20', 'p-1', 'border', 'rounded-lg', 'text-sm', 'text-right', 'focus:ring-indigo-500', 'focus:border-indigo-500');
 
-            // 2. Set the message
-            const message = `Enter the quantity to sell for '${item.name}' (Available: ${item.quantity})`;
-            
-            // 3. Define the confirmation logic
-            const onConfirmSale = () => {
-                const inputElement = document.getElementById('sell-quantity-input');
-                // Check if element exists before reading value, safety check
-                if (!inputElement) return; 
+            // Button container
+            const btnContainer = document.createElement('div');
+            btnContainer.classList.add('flex', 'gap-1');
 
-                const sellQuantity = parseInt(inputElement.value);
-
-                // Validation
-                if (isNaN(sellQuantity) || sellQuantity <= 0) {
-                    // Re-show message if validation fails
-                    showMessage("Invalid quantity. Please enter a positive number.", onConfirmSale, sellQtyInput);
-                    return;
-                }
-                
-                if (sellQuantity > item.quantity) {
-                    // Re-show message if validation fails
-                    showMessage(`Sale quantity cannot be more than available stock (${item.quantity}).`, onConfirmSale, sellQtyInput);
-                    return;
-                }
-
-                // 4. Process Sale
-                // a. Add to Sales List
-                const soldItem = {
-                    id: nextSaleId++, // unique sale ID
-                    code: item.code,
-                    group: item.group,
-                    name: item.name,
-                    quantity: sellQuantity,
-                    rate: item.rate,
-                    amount: parseFloat((sellQuantity * item.rate).toFixed(2)),
-                    saleDate: new Date().toISOString()
-                };
-                salesItems.push(soldItem);
-
-                // b. Reduce stock quantity
-                item.quantity -= sellQuantity;
-                item.amount = parseFloat((item.quantity * item.rate).toFixed(2));
-                
-                let successMessage = '';
-
-                // c. Remove item from stock if quantity hits zero
-                if (item.quantity === 0) {
-                    stockItems.splice(stockIndex, 1);
-                    successMessage = `Sold ${sellQuantity} units of '${item.name}'. Item removed from stock.`;
-                } else {
-                    successMessage = `Sold ${sellQuantity} units of '${item.name}'. Remaining stock: ${item.quantity}.`;
-                }
-                
-                // d. Save and Render
-                saveData();
-                renderStock();
-                renderSales();
-
-                // e. Show final confirmation message (without input or confirm button)
-                showMessage(successMessage);
+            // Confirm Button
+            const confirmBtn = document.createElement('button');
+            confirmBtn.textContent = 'Confirm';
+            confirmBtn.classList.add('text-xs', 'bg-blue-600', 'hover:bg-blue-700', 'text-white', 'py-1', 'px-2', 'rounded-full', 'transition', 'shadow-sm');
+            confirmBtn.onclick = (e) => {
+                e.stopPropagation();
+                processSell(itemId);
             };
 
-            // Temporarily change Confirm button text for clarity
-            document.getElementById('modal-confirm').textContent = 'Confirm Sale';
+            // Cancel Button
+            const cancelBtn = document.createElement('button');
+            cancelBtn.textContent = 'Cancel';
+            cancelBtn.classList.add('text-xs', 'bg-gray-400', 'hover:bg-gray-500', 'text-white', 'py-1', 'px-2', 'rounded-full', 'transition', 'shadow-sm');
+            cancelBtn.onclick = (e) => {
+                e.stopPropagation();
+                renderStock(); // Simply re-render stock to reset the row
+            };
+
+            btnContainer.appendChild(confirmBtn);
+            btnContainer.appendChild(cancelBtn);
             
-            // Show the modal with custom input and confirmation logic
-            showMessage(message, onConfirmSale, sellQtyInput);
-            sellQtyInput.focus(); // Focus on the input field
+            sellForm.appendChild(qtyInput);
+            sellForm.appendChild(btnContainer);
+
+            // Replace old content with new form
+            actionCell.innerHTML = '';
+            actionCell.appendChild(sellForm);
+            qtyInput.focus();
+        }
+
+        /**
+         * Processes the actual sale after inline input is confirmed.
+         * @param {number} itemId - Stock item's unique ID.
+         */
+        function processSell(itemId) {
+            const stockIndex = stockItems.findIndex(item => item.id === itemId);
+            const item = stockItems[stockIndex];
+            const qtyInput = document.getElementById(`sell-qty-input-${itemId}`);
+            
+            if (!item || !qtyInput) {
+                showToast("Error: Item or input not found.", 'error');
+                return;
+            }
+
+            const sellQuantity = parseInt(qtyInput.value);
+
+            // Validation
+            if (isNaN(sellQuantity) || sellQuantity <= 0) {
+                showToast("Invalid quantity. Please enter a positive number.", 'error');
+                return;
+            }
+            
+            if (sellQuantity > item.quantity) {
+                showToast(`Sale quantity cannot be more than available stock (${item.quantity}).`, 'warning');
+                return;
+            }
+
+            // 4. Process Sale
+            // a. Add to Sales List
+            const soldItem = {
+                id: nextSaleId++, // unique sale ID
+                code: item.code,
+                group: item.group,
+                name: item.name,
+                quantity: sellQuantity,
+                rate: item.rate,
+                amount: parseFloat((sellQuantity * item.rate).toFixed(2)),
+                saleDate: new Date().toISOString()
+            };
+            salesItems.push(soldItem);
+
+            // b. Reduce stock quantity
+            item.quantity -= sellQuantity;
+            item.amount = parseFloat((item.quantity * item.rate).toFixed(2));
+            
+            let successMessage = '';
+
+            // c. Remove item from stock if quantity hits zero
+            if (item.quantity === 0) {
+                stockItems.splice(stockIndex, 1);
+                successMessage = `Sold ${sellQuantity} units of '${item.name}'. Item removed from stock.`;
+            } else {
+                successMessage = `Sold ${sellQuantity} units of '${item.name}'. Remaining stock: ${item.quantity}.`;
+            }
+            
+            // d. Save and Render
+            saveData();
+            renderStock();
+            renderSales();
+
+            // e. Show final confirmation message
+            showToast(successMessage);
         }
 
 
         /**
          * Deletes an item from stock or sales list.
+         * WARNING: No confirmation dialog is used as per user request to remove popups.
          * @param {'stock'|'sales'} type - List name.
          * @param {number} itemId - Item's unique ID.
          */
@@ -411,21 +417,20 @@
             const itemName = list[index] ? list[index].name : 'Item'; // Get name before potentially deleting it
 
             if (index === -1) {
-                showMessage(`Item not found in ${listName} list.`);
+                showToast(`Item not found in ${listName} list.`, 'error');
                 return;
             }
-
-            showMessage(`Are you sure you want to delete '${itemName}' permanently from the ${listName} list? This action cannot be undone.`, () => {
-                list.splice(index, 1);
-                
-                saveData();
-                if (type === 'stock') {
-                    renderStock();
-                } else {
-                    renderSales();
-                }
-                showMessage(`'${itemName}' successfully deleted from ${listName}.`);
-            });
+            
+            // Execute deletion immediately (no confirmation popup)
+            list.splice(index, 1);
+            
+            saveData();
+            if (type === 'stock') {
+                renderStock();
+            } else {
+                renderSales();
+            }
+            showToast(`'${itemName}' successfully deleted from ${listName}. (Permanent Action)`, 'warning');
         }
 
         // --- Rendering Functions ---
@@ -448,16 +453,16 @@
             const tableRows = stockItems.map((item) => {
                 totalAmount += item.amount;
                 return `
-                    <tr class="border-b hover:bg-indigo-50 transition duration-100">
+                    <tr id="stock-row-${item.id}" class="border-b hover:bg-indigo-50 transition duration-100">
                         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">${item.serial}</td>
                         <td class="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">${item.code}</td>
                         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${item.group}</td>
                         <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-indigo-600">${item.name}</td>
                         <td class="px-4 py-3 whitespace-nowrap text-sm font-bold text-red-600">${item.quantity}</td>
-                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">$${item.rate.toFixed(2)}</td>
-                        <td class="px-4 py-3 whitespace-nowrap text-sm font-extrabold text-green-700">$${item.amount.toFixed(2)}</td>
-                        <td class="px-4 py-3 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                            <button onclick="sellItem(${item.id})" class="text-xs bg-blue-500 hover:bg-blue-600 text-white py-1 px-3 rounded-full transition duration-150 shadow-md">
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">${CURRENCY_SYMBOL}${item.rate.toFixed(2)}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm font-extrabold text-green-700">${CURRENCY_SYMBOL}${item.amount.toFixed(2)}</td>
+                        <td id="action-cell-${item.id}" class="px-4 py-3 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                            <button onclick="initiateSell(${item.id})" class="text-xs bg-blue-500 hover:bg-blue-600 text-white py-1 px-3 rounded-full transition duration-150 shadow-md">
                                 Sell
                             </button>
                             <button onclick="deleteItem('stock', ${item.id})" class="text-xs bg-red-500 hover:bg-red-600 text-white py-1 px-3 rounded-full transition duration-150 shadow-md">
@@ -488,7 +493,7 @@
                     <tfoot>
                         <tr class="bg-indigo-200 border-t-4 border-indigo-400">
                             <td colspan="6" class="px-4 py-3 text-right text-lg font-bold text-gray-800">TOTAL STOCK VALUE:</td>
-                            <td class="px-4 py-3 whitespace-nowrap text-lg font-bold text-gray-800">$${totalAmount.toFixed(2)}</td>
+                            <td class="px-4 py-3 whitespace-nowrap text-lg font-bold text-gray-800">${CURRENCY_SYMBOL}${totalAmount.toFixed(2)}</td>
                             <td></td>
                         </tr>
                     </tfoot>
@@ -538,8 +543,8 @@
                         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${item.group}</td>
                         <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-indigo-600">${item.name}</td>
                         <td class="px-4 py-3 whitespace-nowrap text-sm font-bold text-red-600">${item.quantity}</td>
-                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">$${item.rate.toFixed(2)}</td>
-                        <td class="px-4 py-3 whitespace-nowrap text-sm font-extrabold text-green-700">$${item.amount.toFixed(2)}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">${CURRENCY_SYMBOL}${item.rate.toFixed(2)}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm font-extrabold text-green-700">${CURRENCY_SYMBOL}${item.amount.toFixed(2)}</td>
                         <td class="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
                             <button onclick="deleteItem('sales', ${item.id})" class="text-xs bg-red-500 hover:bg-red-600 text-white py-1 px-3 rounded-full transition duration-150 shadow-md">
                                 Delete
@@ -570,7 +575,7 @@
                     <tfoot>
                         <tr class="bg-red-200 border-t-4 border-red-400">
                             <td colspan="7" class="px-4 py-3 text-right text-lg font-bold text-gray-800">TOTAL SALE AMOUNT IN FILTER:</td>
-                            <td class="px-4 py-3 whitespace-nowrap text-lg font-bold text-gray-800">$${totalSaleAmount.toFixed(2)}</td>
+                            <td class="px-4 py-3 whitespace-nowrap text-lg font-bold text-gray-800">${CURRENCY_SYMBOL}${totalSaleAmount.toFixed(2)}</td>
                             <td></td>
                         </tr>
                     </tfoot>
@@ -617,7 +622,7 @@
             }
 
             if (dataToPrint.length === 0) {
-                showMessage("No data to print for this selection.");
+                showToast("No data to print for this selection.", 'warning');
                 return;
             }
 
@@ -652,8 +657,8 @@
                         <td style="border: 1px solid #ccc; padding: 6px;">${item.group}</td>
                         <td style="border: 1px solid #ccc; padding: 6px;">${item.name}</td>
                         <td style="border: 1px solid #ccc; padding: 6px;">${item.quantity}</td>
-                        <td style="border: 1px solid #ccc; padding: 6px;">$${item.rate.toFixed(2)}</td>
-                        <td style="border: 1px solid #ccc; padding: 6px;">$${item.amount.toFixed(2)}</td>
+                        <td style="border: 1px solid #ccc; padding: 6px;">${CURRENCY_SYMBOL}${item.rate.toFixed(2)}</td>
+                        <td style="border: 1px solid #ccc; padding: 6px;">${CURRENCY_SYMBOL}${item.amount.toFixed(2)}</td>
                     </tr>
                 `;
             });
@@ -663,7 +668,7 @@
                         <tfoot>
                             <tr style="background-color: #f0f0f0;">
                                 <td colspan="${type === 'sales' ? 7 : 6}" style="border: 1px solid #ccc; padding: 6px; text-align: right; font-weight: bold;">GRAND TOTAL:</td>
-                                <td style="border: 1px solid #ccc; padding: 6px; font-weight: bold;">$${grandTotal.toFixed(2)}</td>
+                                <td style="border: 1px solid #ccc; padding: 6px; font-weight: bold;">${CURRENCY_SYMBOL}${grandTotal.toFixed(2)}</td>
                                 <td></td>
                             </tr>
                         </tfoot>
@@ -681,6 +686,8 @@
             printWindow.document.close();
             printWindow.print();
             printWindow.close();
+            
+            showToast("Report generated for printing.");
         }
 
         // --- Data Management (Import/Export) ---
@@ -710,11 +717,12 @@
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
             
-            showMessage("Data backup file downloaded successfully.");
+            showToast("Data backup file downloaded successfully.");
         }
 
         /**
          * Imports data from a JSON file and restores it.
+         * WARNING: This action is permanent and executed immediately without a confirmation popup.
          */
         function importData() {
             const fileInput = document.getElementById('import-file');
@@ -737,30 +745,28 @@
                          throw new Error("Invalid data format. File structure is incorrect.");
                     }
 
-                    // Confirm before overwriting
-                    showMessage("Are you sure you want to restore data? This will overwrite your current inventory.", () => {
-                        // Restore data
-                        stockItems = importedData.stockItems;
-                        salesItems = importedData.salesItems;
-                        nextStockId = parseInt(importedData.nextStockId);
-                        nextSaleId = parseInt(importedData.nextSaleId);
-                        
-                        // Recalculate all display serials (important for continuous numbering)
-                        stockItems.forEach((item, i) => { item.serial = i + 1; });
-                        salesItems.forEach((item, i) => { item.serial = i + 1; });
+                    // Restore data immediately (no confirmation)
+                    stockItems = importedData.stockItems;
+                    salesItems = importedData.salesItems;
+                    nextStockId = parseInt(importedData.nextStockId);
+                    nextSaleId = parseInt(importedData.nextSaleId);
+                    
+                    // Recalculate all display serials (important for continuous numbering)
+                    stockItems.forEach((item, i) => { item.serial = i + 1; });
+                    salesItems.forEach((item, i) => { item.serial = i + 1; });
 
-                        saveData();
-                        renderStock();
-                        renderSales();
-                        
-                        fileInput.value = ''; // Clear file input
-                        showMessage("Data successfully restored! (Imported data saved to local storage)");
-                    });
+                    saveData();
+                    renderStock();
+                    renderSales();
+                    
+                    fileInput.value = ''; // Clear file input
+                    showToast("Data successfully restored! (Current inventory overwritten)", 'warning');
 
                 } catch (e) {
                     console.error("Data import error:", e);
                     messageElement.textContent = `Data restore failed: ${e.message}. Check console for details.`;
                     messageElement.classList.remove('hidden');
+                    showToast("Data restore failed. See message below.", 'error');
                 }
             };
             reader.readAsText(file);
