@@ -408,21 +408,46 @@
          * Deletes an item from stock or sales list.
          * WARNING: No confirmation dialog is used as per user request to remove popups.
          * @param {'stock'|'sales'} type - List name.
-         * @param {number} itemId - Item's unique ID.
+         * @param {number} itemId - Item's unique ID (or originalId for sales, which is the ID of the first transaction in the aggregated group).
          */
         function deleteItem(type, itemId) {
-            const list = type === 'stock' ? stockItems : salesItems;
-            const listName = type === 'stock' ? 'Stock' : 'Sales';
-            const index = list.findIndex(item => item.id === itemId);
-            const itemName = list[index] ? list[index].name : 'Item'; // Get name before potentially deleting it
-
-            if (index === -1) {
-                showToast(`Item not found in ${listName} list.`, 'error');
-                return;
-            }
             
-            // Execute deletion immediately (no confirmation popup)
-            list.splice(index, 1);
+            if (type === 'stock') {
+                 // --- STOCK DELETION LOGIC (Simple) ---
+                const index = stockItems.findIndex(item => item.id === itemId);
+                const itemName = stockItems[index] ? stockItems[index].name : 'Item';
+                 if (index === -1) {
+                    showToast(`Item not found in Stock list.`, 'error');
+                    return;
+                }
+                stockItems.splice(index, 1);
+                showToast(`'${itemName}' successfully deleted from Stock. (Permanent Action)`, 'warning');
+
+            } else if (type === 'sales') {
+                // --- SALES DELETION LOGIC (Aggregated) ---
+                // We need to find the specific sale entry to get its metadata for grouping
+                const saleToDelete = salesItems.find(item => item.id === itemId);
+                if (!saleToDelete) {
+                    showToast(`Sale transaction not found.`, 'error');
+                    return;
+                }
+                
+                const codeToDelete = saleToDelete.code;
+                // Use the YYYY-MM-DD date part for aggregation/deletion grouping
+                const dateToDelete = saleToDelete.saleDate.substring(0, 10); 
+                const itemName = saleToDelete.name;
+
+                // Filter out ALL sales transactions that match the code AND the date
+                salesItems = salesItems.filter(item => {
+                    const itemDateOnly = item.saleDate.substring(0, 10);
+                    return !(item.code === codeToDelete && itemDateOnly === dateToDelete);
+                });
+
+                showToast(`All aggregated sales of '${itemName}' on ${dateToDelete} successfully deleted. (Permanent Action)`, 'warning');
+            } else {
+                 showToast(`Invalid deletion type.`, 'error');
+                 return;
+            }
             
             saveData();
             if (type === 'stock') {
@@ -430,7 +455,6 @@
             } else {
                 renderSales();
             }
-            showToast(`'${itemName}' successfully deleted from ${listName}. (Permanent Action)`, 'warning');
         }
 
         // --- Rendering Functions ---
@@ -502,14 +526,14 @@
         }
 
         /**
-         * Renders the sales history list (filtered by date).
+         * Renders the sales history list (filtered by date and aggregated).
          */
         function renderSales() {
             const startDate = document.getElementById('start-date').value;
             const endDate = document.getElementById('end-date').value;
             const container = document.getElementById('sales-history-container');
             
-            // Filter sales items
+            // 1. Filter sales items by date range
             let filteredSales = salesItems;
             if (startDate || endDate) {
                 const start = startDate ? new Date(startDate) : new Date(0);
@@ -522,23 +546,55 @@
                 });
             }
 
-            // Re-calculate display serial numbers for the filtered list
-            filteredSales.forEach((item, i) => { item.serial = i + 1; });
+            // 2. Aggregate sales by Date + Code + Name
+            const aggregatedSales = {};
+            
+            filteredSales.forEach(item => {
+                // YYYY-MM-DD for grouping
+                const saleDateOnly = item.saleDate.substring(0, 10); 
+                // Composite key for unique Date/Product combination
+                const key = `${saleDateOnly}|${item.code}|${item.name}`;
 
-            if (filteredSales.length === 0) {
+                if (!aggregatedSales[key]) {
+                    aggregatedSales[key] = {
+                        code: item.code,
+                        group: item.group,
+                        name: item.name,
+                        rate: item.rate, 
+                        quantity: 0,
+                        amount: 0,
+                        saleDate: saleDateOnly, 
+                        // We store the original ID of the first transaction in the group
+                        // to use it as a reference for the delete button.
+                        originalId: item.id 
+                    };
+                }
+
+                // Aggregate quantities and amounts
+                aggregatedSales[key].quantity += item.quantity;
+                aggregatedSales[key].amount = parseFloat((aggregatedSales[key].amount + item.amount).toFixed(2));
+            });
+            
+            // Convert map back to an array for rendering
+            const aggregatedList = Object.values(aggregatedSales);
+
+            // Re-calculate display serial numbers for the aggregated list
+            aggregatedList.forEach((item, i) => { item.serial = i + 1; });
+
+            if (aggregatedList.length === 0) {
                 container.innerHTML = '<p class="text-center text-gray-500 p-8 text-lg font-medium">No sales recorded in the selected date range.</p>';
                 return;
             }
 
             let totalSaleAmount = 0;
-            const tableRows = filteredSales.map(item => {
+            const tableRows = aggregatedList.map(item => {
                 totalSaleAmount += item.amount;
                 // Format date for display
-                const saleDate = new Date(item.saleDate).toLocaleDateString('en-GB', {year: 'numeric', month: 'short', day: 'numeric'});
+                const saleDateDisplay = new Date(item.saleDate).toLocaleDateString('en-GB', {year: 'numeric', month: 'short', day: 'numeric'});
                 return `
                     <tr class="border-b hover:bg-red-50 transition duration-100">
                         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">${item.serial}</td>
-                        <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-800">${saleDate}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-800">${saleDateDisplay}</td>
                         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">${item.code}</td>
                         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">${item.group}</td>
                         <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-indigo-600">${item.name}</td>
@@ -546,7 +602,8 @@
                         <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">${CURRENCY_SYMBOL}${item.rate.toFixed(2)}</td>
                         <td class="px-4 py-3 whitespace-nowrap text-sm font-extrabold text-green-700">${CURRENCY_SYMBOL}${item.amount.toFixed(2)}</td>
                         <td class="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
-                            <button onclick="deleteItem('sales', ${item.id})" class="text-xs bg-red-500 hover:bg-red-600 text-white py-1 px-3 rounded-full transition duration-150 shadow-md">
+                            <!-- Use originalId as the reference for deletion (will delete all matching records for the day) -->
+                            <button onclick="deleteItem('sales', ${item.originalId})" class="text-xs bg-red-500 hover:bg-red-600 text-white py-1 px-3 rounded-full transition duration-150 shadow-md">
                                 Delete
                             </button>
                         </td>
@@ -601,17 +658,43 @@
                 reportTitle = 'Current Remaining Stock List';
                 dateRange = `Date Generated: ${new Date().toLocaleDateString('en-GB')}`;
             } else if (type === 'sales') {
+                 // Re-run aggregation logic to get the list to print
                 const startDate = document.getElementById('start-date').value;
                 const endDate = document.getElementById('end-date').value;
                 
-                const start = startDate ? new Date(startDate) : new Date(0);
-                const end = endDate ? new Date(endDate) : new Date();
-                if (endDate) end.setDate(end.getDate() + 1);
+                let filteredSales = salesItems;
+                if (startDate || endDate) {
+                    const start = startDate ? new Date(startDate) : new Date(0);
+                    const end = endDate ? new Date(endDate) : new Date();
+                    if (endDate) end.setDate(end.getDate() + 1); 
 
-                dataToPrint = salesItems.filter(item => {
-                    const saleDate = new Date(item.saleDate);
-                    return saleDate >= start && saleDate < end;
-                }).map((item, index) => ({
+                    filteredSales = salesItems.filter(item => {
+                        const saleDate = new Date(item.saleDate);
+                        return saleDate >= start && saleDate < end;
+                    });
+                }
+                
+                const aggregatedSales = {};
+                filteredSales.forEach(item => {
+                    const saleDateOnly = item.saleDate.substring(0, 10);
+                    const key = `${saleDateOnly}|${item.code}|${item.name}`;
+
+                    if (!aggregatedSales[key]) {
+                        aggregatedSales[key] = {
+                            code: item.code,
+                            group: item.group,
+                            name: item.name,
+                            rate: item.rate,
+                            quantity: 0,
+                            amount: 0,
+                            saleDate: saleDateOnly,
+                        };
+                    }
+                    aggregatedSales[key].quantity += item.quantity;
+                    aggregatedSales[key].amount = parseFloat((aggregatedSales[key].amount + item.amount).toFixed(2));
+                });
+                
+                dataToPrint = Object.values(aggregatedSales).map((item, index) => ({
                     ...item, 
                     serial: index + 1, 
                     saleDate: new Date(item.saleDate).toLocaleDateString('en-GB', {year: 'numeric', month: 'short', day: 'numeric'})
